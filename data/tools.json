@@ -32,22 +32,6 @@
     ]
   },
   {
-    "id": 1003,
-    "name": "JSON格式化",
-    "description": "JSON在线格式化/校验/压缩",
-    "icon": "📋",
-    "usageType": "online",
-    "source": "self",
-    "toolType": "url",
-    "url": "#self-json",
-    "category": "dev",
-    "tags": [
-      "JSON",
-      "格式化",
-      "校验"
-    ]
-  },
-  {
     "id": 1004,
     "name": "Regex101",
     "description": "正则表达式在线测试",
@@ -192,22 +176,6 @@
     ]
   },
   {
-    "id": 3004,
-    "name": "腾讯会议",
-    "description": "高清流畅视频会议软件",
-    "icon": "🎥",
-    "usageType": "download",
-    "source": "third_party",
-    "toolType": "url",
-    "url": "https://meeting.tencent.com",
-    "category": "office",
-    "tags": [
-      "会议",
-      "视频",
-      "协作"
-    ]
-  },
-  {
     "id": 4001,
     "name": "Everything",
     "description": "极速文件搜索工具",
@@ -288,15 +256,31 @@
     ]
   },
   {
-    "id": 6640792,
-    "name": "彩票分析工具",
-    "description": "双色球和大乐透",
+    "id": 2146771,
+    "name": "代码管理",
+    "description": "轻量化代码管理",
+    "icon": "📊",
+    "usageType": "online",
+    "source": "self",
+    "toolType": "url",
+    "url": "https://git-gx.streamlit.app/",
+    "category": "dev",
+    "tags": [
+      "代码"
+    ]
+  },
+  {
+    "id": 4920510,
+    "name": "彩票分析系统",
+    "description": "彩票分析系统",
     "icon": "🎮",
     "usageType": "online",
     "source": "self",
     "toolType": "url",
     "url": "https://caipiao.streamlit.app/",
     "category": "entertainment",
-    "tags": []
+    "tags": [
+      "彩票"
+    ]
   }
 ]

@@ -1,8 +1,16 @@
+import math
 import streamlit as st
 from tools_data import (
     CATEGORIES, load_tools, filter_tools, add_url_tool,
     add_file_tool, delete_tool, get_file_path, get_greeting
 )
+
+PER_PAGE = 10
+
+SOURCE_CATEGORIES = [
+    {"id": "source_self", "name": "自研", "icon": "🔬"},
+    {"id": "source_third", "name": "第三方", "icon": "🌐"},
+]
 
 st.set_page_config(
     page_title="小工具百宝箱",
@@ -23,25 +31,23 @@ CUSTOM_CSS = """
     --download: #F0A500;
     --bg-light: #F5F7FA;
     --bg-light-end: #E4E8F0;
-    --bg-dark: #0F0F12;
-    --bg-dark-end: #1A1A22;
     --card-light: #FFFFFF;
-    --card-dark: #1E1E24;
     --text-light: #1A1D2E;
-    --text-dark: #F0F1F5;
+    --text-secondary: #64748B;
     --border-light: rgba(232,234,242,0.4);
-    --border-dark: rgba(37,40,64,0.4);
+    --nav-bg: rgba(255,255,255,0.7);
+    --nav-shadow: rgba(0,0,0,0.06);
+    --cat-hover: rgba(99,102,241,0.05);
+    --source-self-bg: linear-gradient(135deg, #EEF0FF, #E0E3FF);
+    --source-self-color: #6366F1;
+    --source-third-bg: linear-gradient(135deg, #FFF8EB, #FFF0D4);
+    --source-third-color: #B8860B;
+    --divider: rgba(0,0,0,0.04);
+    --tag-bg: rgba(0,0,0,0.03);
 }
 
 .stApp {
     background: linear-gradient(135deg, var(--bg-light) 0%, var(--bg-light-end) 100%) !important;
-    transition: background 0.4s ease !important;
-}
-
-@media (prefers-color-scheme: dark) {
-    .stApp {
-        background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-dark-end) 100%) !important;
-    }
 }
 
 section[data-testid="stSidebar"] { display: none !important; }
@@ -62,26 +68,20 @@ header[data-testid="stHeader"] { display: none !important; }
     .block-container { padding: 20px 16px !important; }
 }
 
-/* ========== NAV BAR via :has() ========== */
+/* ========== NAV BAR ========== */
 [data-testid="stLayoutWrapper"]:has(.nav-marker) {
-    background: rgba(255,255,255,0.7) !important;
+    background: var(--nav-bg) !important;
     backdrop-filter: blur(12px) !important;
     -webkit-backdrop-filter: blur(12px) !important;
     border-radius: 28px !important;
     padding: 8px 20px !important;
+    min-height: 56px !important;
     margin-bottom: 16px !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    box-shadow: 0 2px 8px var(--nav-shadow) !important;
     transition: all 0.3s ease !important;
     position: sticky !important;
     top: 0 !important;
     z-index: 100 !important;
-}
-
-@media (prefers-color-scheme: dark) {
-    [data-testid="stLayoutWrapper"]:has(.nav-marker) {
-        background: rgba(30,30,36,0.7) !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-    }
 }
 
 [data-testid="stLayoutWrapper"]:has(.nav-marker) [data-testid="stVerticalBlock"] { gap: 0 !important; }
@@ -105,15 +105,25 @@ header[data-testid="stHeader"] { display: none !important; }
     height: 40px;
 }
 
-[data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"] {
+/* Search input - comprehensive override to fix border disorder */
+[data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"],
+[data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"]:focus,
+[data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"]:hover {
     border-radius: 20px !important;
     height: 40px !important;
+    max-width: 400px !important;
+    margin: 0 auto !important;
     text-align: center !important;
     background: rgba(255,255,255,0.5) !important;
     border: 1.5px solid var(--border-light) !important;
+    outline: none !important;
+    box-shadow: none !important;
     font-size: 14px !important;
     font-family: 'DM Sans', 'Noto Sans SC', sans-serif !important;
-    transition: all 0.25s ease !important;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
+    color: var(--text-light) !important;
+    -webkit-text-fill-color: var(--text-light) !important;
+    caret-color: var(--accent) !important;
 }
 
 [data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"]:focus {
@@ -123,13 +133,9 @@ header[data-testid="stHeader"] { display: none !important; }
 
 [data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"]::placeholder { opacity: 0.4; text-align: center; }
 
-@media (prefers-color-scheme: dark) {
-    [data-testid="stLayoutWrapper"]:has(.nav-marker) input[type="text"] {
-        background: rgba(30,30,36,0.5) !important;
-        border-color: var(--border-dark) !important;
-        color: var(--text-dark) !important;
-    }
-}
+/* Only hide label and instructions, NOT the input wrapper div */
+[data-testid="stLayoutWrapper"]:has(.nav-marker) .stTextInput label { display: none !important; }
+[data-testid="stLayoutWrapper"]:has(.nav-marker) .stTextInput [data-testid="stTextInputInstructions"] { display: none !important; }
 
 [data-testid="stLayoutWrapper"]:has(.nav-marker) .stButton > button {
     background: linear-gradient(90deg, #6366F1, #8B5CF6) !important;
@@ -149,15 +155,21 @@ header[data-testid="stHeader"] { display: none !important; }
     transform: translateY(-1px);
 }
 
-/* ========== CATEGORY BAR via :has() ========== */
+/* Hide "Press Enter to apply" debug text - comprehensive override */
+.stTextInput small, .stTextInput p { display: none !important; }
+[data-testid="stTextInputInstructions"] { display: none !important; }
+.stTextInput [data-baseweb="form-control"] small,
+.stTextInput [data-baseweb="form-control"] p { display: none !important; }
+
+/* ========== CATEGORY BAR ========== */
 [data-testid="stLayoutWrapper"]:has(.cat-marker) {
-    background: rgba(255,255,255,0.7) !important;
+    background: var(--nav-bg) !important;
     backdrop-filter: blur(12px) !important;
     -webkit-backdrop-filter: blur(12px) !important;
     border-radius: 24px !important;
     padding: 6px 12px !important;
     margin-bottom: 16px !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    box-shadow: 0 2px 8px var(--nav-shadow) !important;
     gap: 6px !important;
     overflow-x: auto !important;
     scrollbar-width: none !important;
@@ -165,13 +177,6 @@ header[data-testid="stHeader"] { display: none !important; }
 }
 
 [data-testid="stLayoutWrapper"]:has(.cat-marker)::-webkit-scrollbar { display: none; }
-
-@media (prefers-color-scheme: dark) {
-    [data-testid="stLayoutWrapper"]:has(.cat-marker) {
-        background: rgba(30,30,36,0.7) !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-    }
-}
 
 [data-testid="stLayoutWrapper"]:has(.cat-marker) [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stLayoutWrapper"]:has(.cat-marker) [data-testid="stElementContainer"] { padding-top: 0 !important; padding-bottom: 0 !important; }
@@ -181,117 +186,100 @@ header[data-testid="stHeader"] { display: none !important; }
 [data-testid="stLayoutWrapper"]:has(.cat-marker) .stButton > button {
     border-radius: 18px !important;
     height: 36px !important;
+    min-height: 36px !important;
     min-width: 60px !important;
-    padding: 4px 12px !important;
+    max-width: 140px !important;
+    padding: 6px 12px !important;
     font-size: 13px !important;
     font-family: 'DM Sans', 'Noto Sans SC', sans-serif !important;
     white-space: nowrap !important;
     transition: all 0.25s ease !important;
     border: none !important;
+    background: transparent !important;
+    color: var(--text-secondary) !important;
 }
 
-.cat-sep {
+[data-testid="stLayoutWrapper"]:has(.cat-marker) .stButton > button:hover {
+    background: var(--cat-hover) !important;
+    color: #475569 !important;
+}
+
+[data-testid="stLayoutWrapper"]:has(.cat-marker) .stButton > button[kind="primary"] {
+    background: linear-gradient(90deg, #6366F1, #8B5CF6) !important;
+    color: #FFFFFF !important;
+    font-weight: 500 !important;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.25) !important;
+}
+
+[data-testid="stLayoutWrapper"]:has(.cat-marker) .stButton > button[kind="primary"]:hover {
+    background: linear-gradient(90deg, #4F46E5, #7C3AED) !important;
+    box-shadow: 0 4px 12px rgba(99,102,241,0.35) !important;
+}
+
+.cat-separator {
     width: 1px;
-    height: 20px;
-    background: rgba(0,0,0,0.06);
-    flex-shrink: 0;
-    margin: 0 2px;
-}
-
-@media (prefers-color-scheme: dark) {
-    .cat-sep { background: rgba(255,255,255,0.06); }
+    height: 24px;
+    background: var(--divider);
+    margin: 0 4px;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 /* ========== WELCOME SECTION ========== */
 .welcome-section {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .welcome-greeting {
     font-family: 'Outfit', 'Noto Sans SC', sans-serif;
-    font-size: 17px;
-    font-weight: 700;
-    background: linear-gradient(135deg, #6366F1, #8B5CF6, #F0A500);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-size: 15px;
+    font-weight: 600;
+    opacity: 0.45;
 }
 
-/* ========== TOOLS GRID ========== */
-.tools-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 28px;
-}
-
-@media (max-width: 1280px) { .tools-grid { grid-template-columns: repeat(4, 1fr); gap: 24px; } }
-@media (max-width: 1024px) { .tools-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
-@media (max-width: 768px) { .tools-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; } }
-
-/* ========== TOOL CARD ========== */
-.tool-card {
-    background: var(--card-light);
-    border-radius: 20px;
-    padding: 24px;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    transition: all 0.25s ease;
-    min-height: 220px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    cursor: pointer;
-    max-width: 100%;
-    margin: 0 auto;
-}
-
-@media (prefers-color-scheme: dark) {
-    .tool-card {
-        background: var(--card-dark);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    }
-}
-
-.tool-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(99,102,241,0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-    .tool-card:hover { box-shadow: 0 8px 24px rgba(99,102,241,0.2); }
-}
-
-.tool-card:active { transform: scale(0.98); transition: transform 0.1s ease; }
-
-.tool-icon { font-size: 32px; margin-bottom: 8px; margin-top: 4px; }
-
-.tool-name {
-    font-family: 'Outfit', 'Noto Sans SC', sans-serif;
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-}
-
-.tool-desc {
-    font-size: 13px;
+.welcome-count {
+    font-size: 12px;
+    margin-left: 12px;
     opacity: 0.5;
-    line-height: 1.5;
-    margin-bottom: 12px;
-    text-align: center;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
 }
 
-.source-tag {
+.welcome-count strong {
+    color: #6366F1;
+    font-weight: 700;
+}
+
+/* ========== TOOL CARD - target individual column ========== */
+[data-testid="stColumn"]:has(.tool-card-marker) {
+    background: var(--card-light) !important;
+    border-radius: 20px !important;
+    padding: 20px 16px 8px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    transition: all 0.25s ease !important;
+    position: relative !important;
+    overflow: visible !important;
+    min-height: 260px !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker):hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 8px 24px rgba(99,102,241,0.15) !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker):active {
+    transform: scale(0.98) !important;
+    transition: transform 0.1s ease !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stElementContainer"] { padding-top: 0 !important; padding-bottom: 0 !important; }
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stVerticalBlock"] { gap: 0 !important; }
+[data-testid="stColumn"]:has(.tool-card-marker) .stMarkdown { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+
+.tool-card-marker { display: contents; }
+
+.tool-card-marker .source-tag {
     font-size: 11px;
     font-weight: 600;
     padding: 3px 8px;
@@ -300,21 +288,56 @@ header[data-testid="stHeader"] { display: none !important; }
     top: 12px;
     right: 12px;
     white-space: nowrap;
+    z-index: 3;
+}
+
+.tool-card-marker .source-self { background: var(--source-self-bg); color: var(--source-self-color); }
+.tool-card-marker .source-third { background: var(--source-third-bg); color: var(--source-third-color); }
+
+.tool-card-marker .tool-icon { font-size: 32px; margin-bottom: 6px; margin-top: 4px; text-align: center; height: 42px; line-height: 42px; }
+
+.tool-card-marker .tool-name {
+    font-family: 'Outfit', 'Noto Sans SC', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 4px;
     text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    color: var(--text-light);
+    height: 22px;
+    line-height: 22px;
 }
 
-.source-self { background: linear-gradient(135deg, #EEF0FF, #E0E3FF); color: #6366F1; }
-.source-third { background: linear-gradient(135deg, #FFF8EB, #FFF0D4); color: #B8860B; }
-
-@media (prefers-color-scheme: dark) {
-    .source-self { background: rgba(99,102,241,0.15); color: #A5B4FC; }
-    .source-third { background: rgba(240,165,0,0.1); color: #F0C060; }
+.tool-card-marker .tool-desc {
+    font-size: 12px;
+    opacity: 0.45;
+    line-height: 1.5;
+    margin-bottom: 8px;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    height: 36px;
 }
 
-.usage-tag {
+.tool-card-marker .card-tags {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 4px;
+    min-height: 22px;
+}
+
+.tool-card-marker .usage-tag {
     font-size: 11px;
     font-weight: 500;
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: 8px;
     display: inline-flex;
     align-items: center;
@@ -322,39 +345,167 @@ header[data-testid="stHeader"] { display: none !important; }
     white-space: nowrap;
 }
 
-.usage-online { color: #00D2A0; background: rgba(0,210,160,0.08); }
-.usage-download { color: #F0A500; background: rgba(240,165,0,0.08); }
+.tool-card-marker .usage-online { color: #00D2A0; background: rgba(0,210,160,0.08); }
+.tool-card-marker .usage-download { color: #F0A500; background: rgba(240,165,0,0.08); }
 
-.tool-tag {
+.tool-card-marker .tool-tag {
     font-size: 11px;
-    padding: 4px 8px;
+    padding: 3px 6px;
     border-radius: 6px;
-    background: rgba(0,0,0,0.03);
+    background: var(--tag-bg);
     opacity: 0.5;
     font-weight: 500;
     white-space: nowrap;
 }
 
-@media (prefers-color-scheme: dark) {
-    .tool-tag { background: rgba(255,255,255,0.04); }
-}
-
-.card-action {
-    font-size: 14px;
-    font-weight: 500;
-    background: linear-gradient(90deg, #6366F1, #8B5CF6);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-top: auto;
-    padding-top: 12px;
-    border-top: 1px solid rgba(0,0,0,0.04);
+.tool-card-marker .card-divider {
     width: 100%;
-    text-align: center;
+    height: 1px;
+    background: var(--divider);
+    margin: 6px 0 2px;
 }
 
-@media (prefers-color-scheme: dark) {
-    .card-action { border-top-color: rgba(255,255,255,0.06); }
+/* Card click overlay - full card clickable */
+.card-click-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: 20px;
+    text-decoration: none;
+    color: transparent;
+    background: transparent;
+}
+
+.card-click-overlay:hover {
+    background: rgba(99,102,241,0.02);
+}
+
+/* ========== CARD ACTION BUTTONS - unified at bottom ========== */
+.card-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: auto;
+    min-height: 28px;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.action-marker) {
+    flex: 1 !important;
+    min-width: 0 !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.action-marker) button,
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.action-marker) a[data-testid="stBaseLinkButton-secondary"] {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #6366F1 !important;
+    font-weight: 500 !important;
+    font-size: 13px !important;
+    border-radius: 0 !important;
+    padding: 4px 0 !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    transition: all 0.2s ease !important;
+    font-family: 'DM Sans', 'Noto Sans SC', sans-serif !important;
+    position: relative !important;
+    z-index: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.action-marker) button:hover,
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.action-marker) a[data-testid="stBaseLinkButton-secondary"]:hover {
+    color: #4F46E5 !important;
+    background: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Delete button - hover only */
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.del-marker) button {
+    opacity: 0;
+    transition: opacity 0.2s ease, background 0.2s ease !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #EF4444 !important;
+    font-size: 14px !important;
+    padding: 2px 6px !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    border-radius: 6px !important;
+    position: relative !important;
+    z-index: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker):hover [data-testid="stColumn"]:has(.del-marker) button {
+    opacity: 1;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stColumn"]:has(.del-marker) button:hover {
+    background: rgba(239,68,68,0.08) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Force card bottom section to stick to bottom */
+[data-testid="stColumn"]:has(.tool-card-marker) > [data-testid="stVerticalBlock"] {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+[data-testid="stColumn"]:has(.tool-card-marker) [data-testid="stLayoutWrapper"]:has(.action-marker) {
+    margin-top: auto !important;
+}
+
+/* ========== PAGINATION ========== */
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    margin-top: 24px !important;
+}
+
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) [data-testid="stVerticalBlock"] { gap: 0 !important; }
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) [data-testid="stElementContainer"] { padding: 0 !important; }
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) .stButton { margin: 0 !important; padding: 0 !important; }
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) .stMarkdown { margin: 0 !important; padding: 0 !important; }
+
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) .stButton > button {
+    border-radius: 10px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    padding: 2px 8px !important;
+    font-size: 13px !important;
+    transition: all 0.25s ease !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+}
+
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) .stButton > button:hover {
+    transform: translateY(-1px) !important;
+    background: var(--cat-hover) !important;
+}
+
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) .stButton > button[kind="primary"] {
+    background: linear-gradient(90deg, #6366F1, #8B5CF6) !important;
+    color: #FFFFFF !important;
+    font-weight: 500 !important;
+    box-shadow: 0 2px 6px rgba(99,102,241,0.2) !important;
+}
+
+[data-testid="stLayoutWrapper"]:has(.pagination-marker) .stButton > button[kind="primary"]:hover {
+    background: linear-gradient(90deg, #4F46E5, #7C3AED) !important;
+    box-shadow: 0 3px 10px rgba(99,102,241,0.3) !important;
 }
 
 /* ========== FOOTER ========== */
@@ -382,25 +533,11 @@ header[data-testid="stHeader"] { display: none !important; }
 
 /* ========== ANIMATIONS ========== */
 @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fade-in { animation: fadeInUp 0.3s ease forwards; }
-
-/* ========== GLOBAL BUTTON OVERRIDES ========== */
-div.stButton > button {
-    border-radius: 18px !important;
-    padding: 8px 16px !important;
-    font-size: 14px !important;
-    transition: all 0.25s ease !important;
-    font-family: 'DM Sans', 'Noto Sans SC', sans-serif !important;
-}
-
-div.stButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(99,102,241,0.15);
-}
+.tool-card-marker { animation: fadeInUp 0.3s ease forwards; }
 
 /* ========== DIALOG STYLING ========== */
 [data-testid="stDialog"] {
@@ -410,6 +547,12 @@ div.stButton > button:hover {
 
 [data-testid="stDialog"] > div {
     border-radius: 24px !important;
+}
+
+[data-testid="stModalBackdrop"] {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    background: rgba(0,0,0,0.3) !important;
 }
 
 /* ========== STREAMLIT INPUT STYLING ========== */
@@ -430,12 +573,25 @@ div.stButton > button:hover {
     min-height: 48px !important;
 }
 
-/* ========== CARD BUTTON AREA ========== */
-.card-btns [data-testid="stElementContainer"] { padding-top: 0 !important; padding-bottom: 0 !important; }
-.card-btns [data-testid="stVerticalBlock"] { gap: 0 !important; }
-.card-btns .stMarkdown { margin: 0 !important; }
-.card-btns .stButton { margin: 0 !important; }
-.card-btns .stDownloadButton { margin: 0 !important; }
+/* ========== GLOBAL BUTTON OVERRIDES ========== */
+div.stButton > button {
+    border-radius: 18px !important;
+    padding: 8px 16px !important;
+    font-size: 14px !important;
+    transition: all 0.25s ease !important;
+    font-family: 'DM Sans', 'Noto Sans SC', sans-serif !important;
+}
+
+div.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.15);
+}
+
+/* ========== GRID ROW SPACING ========== */
+[data-testid="stLayoutWrapper"]:has(.grid-row-marker) {
+    margin-bottom: 28px !important;
+}
+[data-testid="stLayoutWrapper"]:has(.grid-row-marker) [data-testid="stVerticalBlock"] { gap: 0 !important; }
 </style>
 """
 
@@ -444,20 +600,28 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 def init_state():
     defaults = {
-        "active_category": "recommend",
-        "source_filter": "all",
+        "active_category": "source_self",
         "search_query": "",
         "show_add_modal": False,
+        "modal_open_count": 0,
         "toast_msg": "",
         "toast_show": False,
+        "current_page": 1,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
 
+def _on_search_change():
+    new_query = st.session_state.get("search_input", "")
+    if new_query != st.session_state.search_query:
+        st.session_state.search_query = new_query
+        st.session_state.current_page = 1
+
+
 def render_nav():
-    logo_col, search_col, add_col = st.columns([1, 3, 1])
+    logo_col, search_col, add_col = st.columns([1.2, 4, 0.8])
 
     with logo_col:
         st.markdown(
@@ -466,83 +630,62 @@ def render_nav():
         )
 
     with search_col:
-        query = st.text_input(
-            "搜索", value=st.session_state.search_query,
-            placeholder="搜索工具...", label_visibility="collapsed",
+        st.text_input(
+            "搜索",
+            value=st.session_state.search_query,
+            placeholder="搜索工具...",
+            label_visibility="collapsed",
             key="search_input",
+            on_change=_on_search_change,
         )
-        if query != st.session_state.search_query:
-            st.session_state.search_query = query
-            st.rerun()
 
     with add_col:
         if st.button("➕ 添加", key="add_btn_nav", use_container_width=True):
             st.session_state.show_add_modal = True
+            st.session_state.modal_open_count = st.session_state.get("modal_open_count", 0) + 1
             st.rerun()
 
 
 def render_category_bar():
-    n_cats = len(CATEGORIES)
-    col_specs = [1.2] * n_cats + [0.2] + [1] * 3 + [0.2] + [1.3]
-    cols = st.columns(col_specs)
+    all_cats = CATEGORIES + SOURCE_CATEGORIES
+    n_func = len(CATEGORIES)
+    col_widths = [1] * n_func + [0.3] + [0.8] * len(SOURCE_CATEGORIES)
+    cols = st.columns(col_widths)
 
     for i, cat in enumerate(CATEGORIES):
         with cols[i]:
             is_active = st.session_state.active_category == cat['id']
             btn_type = "primary" if is_active else "secondary"
+            if i == len(CATEGORIES) - 1:
+                st.markdown('<div class="cat-marker" style="display:none"></div>', unsafe_allow_html=True)
             if st.button(f"{cat['icon']} {cat['name']}", key=f"cat_{cat['id']}", type=btn_type, use_container_width=True):
                 st.session_state.active_category = cat['id']
                 st.session_state.search_query = ""
+                st.session_state.current_page = 1
+                st.session_state.show_add_modal = False
                 st.rerun()
 
-    with cols[n_cats]:
-        st.markdown('<div class="cat-sep cat-marker"></div>', unsafe_allow_html=True)
+    with cols[n_func]:
+        st.markdown('<div class="cat-separator"></div>', unsafe_allow_html=True)
 
-    source_items = [("self", "🏠 自研"), ("third_party", "🌐 第三方"), ("all", "📋 全部")]
-    for j, (val, label) in enumerate(source_items):
-        with cols[n_cats + 1 + j]:
-            is_active = st.session_state.source_filter == val
+    for j, src in enumerate(SOURCE_CATEGORIES):
+        with cols[n_func + 1 + j]:
+            is_active = st.session_state.active_category == src['id']
             btn_type = "primary" if is_active else "secondary"
-            if st.button(label, key=f"src_{val}", type=btn_type, use_container_width=True):
-                st.session_state.source_filter = val
+            if st.button(f"{src['icon']} {src['name']}", key=f"cat_{src['id']}", type=btn_type, use_container_width=True):
+                st.session_state.active_category = src['id']
+                st.session_state.search_query = ""
+                st.session_state.current_page = 1
+                st.session_state.show_add_modal = False
                 st.rerun()
 
-    with cols[n_cats + 4]:
-        st.markdown('<div class="cat-sep"></div>', unsafe_allow_html=True)
 
-    with cols[n_cats + 5]:
-        if st.button("➕ 添加工具", key="add_btn_cat", type="primary", use_container_width=True):
-            st.session_state.show_add_modal = True
-            st.rerun()
-
-
-def render_welcome(total, display, custom):
+def render_welcome(total, display):
     greeting = get_greeting()
-    custom_html = ""
-    if custom > 0:
-        custom_html = (
-            f'<div style="margin-top:8px">'
-            f'<span style="font-size:11px;padding:4px 12px;border-radius:8px;'
-            f'background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.05));'
-            f'color:#6366F1;font-weight:500">✨ {custom} 个自定义</span></div>'
-        )
-
     st.markdown(f"""
     <div class="welcome-section">
-        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:4px">
-            <span style="font-size:20px">👋</span>
-            <span class="welcome-greeting">{greeting}</span>
-            <span style="opacity:0.6;font-size:17px;font-weight:600">今天需要什么工具？</span>
-        </div>
-        <p style="font-size:12px;opacity:0.35;display:flex;align-items:center;justify-content:center;gap:6px">
-            <span style="display:inline-flex;align-items:center;gap:4px">
-                <span style="width:6px;height:6px;border-radius:50%;background:#00D2A0"></span>
-                当前展示 <strong style="opacity:0.8">{display}</strong> 个
-            </span>
-            <span style="opacity:0.3">·</span>
-            <span>共 {total} 个可用</span>
-        </p>
-        {custom_html}
+        <span class="welcome-greeting">👋 {greeting}，今天需要什么工具？</span>
+        <span class="welcome-count">展示 <strong>{display}</strong>/<strong>{total}</strong> 个</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -569,45 +712,53 @@ def render_tool_card(tool):
         fn = tool['fileName'] if len(tool['fileName']) <= 12 else tool['fileName'][:10] + "…"
         file_name_html = f'<span class="tool-tag">{fn}</span> '
 
-    action_label = "下载 →" if (is_file or not is_online) else "使用 →"
+    action_label = "📥 下载" if (is_file or not is_online) else "🔗 使用"
+
+    overlay_html = ""
+    if tool.get('url') and not tool['url'].startswith('#') and not is_file:
+        overlay_html = f'<a class="card-click-overlay" href="{tool["url"]}" target="_blank" rel="noopener noreferrer" aria-label="打开{tool["name"]}"></a>'
 
     card_html = f"""
-    <div class="tool-card animate-fade-in">
+    <div class="tool-card-marker">
+        {overlay_html}
         <span class="source-tag {source_class}">{source_label}</span>
         <div class="tool-icon">{tool.get('icon', '🔧')}</div>
         <div class="tool-name">{tool['name']}</div>
         <div class="tool-desc">{tool['description']}</div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px">
+        <div class="card-tags">
             <span class="usage-tag {usage_class}">
                 <span style="width:6px;height:6px;border-radius:50%;background:{dot_color};display:inline-block"></span>
                 {usage_label}
             </span>
             {file_name_html}{tags_html}
         </div>
-        <span class="card-action">{action_label}</span>
+        <div class="card-divider"></div>
     </div>
     """
     st.markdown(card_html, unsafe_allow_html=True)
 
-    st.markdown('<div class="card-btns">', unsafe_allow_html=True)
-    btn_col1, btn_col2 = st.columns([4, 1])
-    with btn_col1:
+    action_col, del_col = st.columns([5, 1])
+    with action_col:
+        st.markdown('<div class="action-marker" style="display:none"></div>', unsafe_allow_html=True)
         if is_file and tool.get('fileId'):
             fp = get_file_path(tool['fileId'])
             if fp:
                 with open(fp, 'rb') as f:
                     st.download_button(
-                        "📥 下载", data=f.read(),
+                        action_label, data=f.read(),
                         file_name=tool.get('fileName', fp.name),
                         key=f"dl_{tool['id']}", use_container_width=True,
                     )
+            else:
+                st.button("文件缺失", key=f"miss_{tool['id']}", disabled=True, use_container_width=True)
         elif tool.get('url') and not tool['url'].startswith('#'):
-            st.link_button("🔗 打开", tool['url'], key=f"open_{tool['id']}", use_container_width=True)
+            st.link_button(action_label, tool['url'], key=f"open_{tool['id']}", use_container_width=True)
         else:
             st.button("📋 查看", key=f"view_{tool['id']}", disabled=True, use_container_width=True)
 
-    with btn_col2:
-        if st.button("🗑", key=f"del_{tool['id']}", help="删除此工具"):
+    with del_col:
+        st.markdown('<div class="del-marker" style="display:none"></div>', unsafe_allow_html=True)
+        if st.button("🗑", key=f"del_{tool['id']}", help="删除"):
             ok, msg = delete_tool(tool['id'])
             if ok:
                 st.session_state.toast_msg = "删除成功"
@@ -615,7 +766,6 @@ def render_tool_card(tool):
                 st.rerun()
             else:
                 st.error(msg)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_tools_grid(tools):
@@ -629,17 +779,60 @@ def render_tools_grid(tools):
         """, unsafe_allow_html=True)
         return
 
-    st.markdown('<div class="tools-grid">', unsafe_allow_html=True)
+    total_pages = max(1, math.ceil(len(tools) / PER_PAGE))
+    current_page = min(st.session_state.current_page, total_pages)
+    if current_page < 1:
+        current_page = 1
+    st.session_state.current_page = current_page
+
+    start = (current_page - 1) * PER_PAGE
+    end = start + PER_PAGE
+    page_tools = tools[start:end]
 
     cols_per_row = 5
-    for i in range(0, len(tools), cols_per_row):
-        row = tools[i:i + cols_per_row]
-        cols = st.columns(cols_per_row)
+    for i in range(0, len(page_tools), cols_per_row):
+        row = page_tools[i:i + cols_per_row]
+        row_cols = st.columns(cols_per_row)
         for j, tool in enumerate(row):
-            with cols[j]:
+            with row_cols[j]:
                 render_tool_card(tool)
+        if i == 0:
+            st.markdown('<div class="grid-row-marker" style="display:none"></div>', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    if total_pages > 1:
+        render_pagination(current_page, total_pages)
+
+
+def render_pagination(current_page, total_pages):
+    start_page = max(1, current_page - 2)
+    end_page = min(total_pages, start_page + 4)
+    start_page = max(1, end_page - 4)
+
+    n_visible = end_page - start_page + 1
+    n_cols = n_visible + 2
+
+    cols = st.columns(n_cols)
+
+    with cols[0]:
+        st.markdown('<div class="pagination-marker" style="display:none"></div>', unsafe_allow_html=True)
+        if current_page > 1:
+            if st.button("←", key="prev_page", use_container_width=True):
+                st.session_state.current_page = current_page - 1
+                st.rerun()
+
+    for idx, page_num in enumerate(range(start_page, end_page + 1)):
+        with cols[idx + 1]:
+            is_current = page_num == current_page
+            btn_type = "primary" if is_current else "secondary"
+            if st.button(str(page_num), key=f"page_{page_num}", type=btn_type, use_container_width=True):
+                st.session_state.current_page = page_num
+                st.rerun()
+
+    with cols[n_cols - 1]:
+        if current_page < total_pages:
+            if st.button("→", key="next_page", use_container_width=True):
+                st.session_state.current_page = current_page + 1
+                st.rerun()
 
 
 def render_add_modal():
@@ -648,61 +841,88 @@ def render_add_modal():
 
     @st.dialog("添加新工具", width="small")
     def add_dialog():
-        mode = st.radio("类型", ["🔗 URL链接", "📁 文件上传"], horizontal=True, key="add_mode_radio")
+        st.session_state["_dialog_was_open"] = True
+
+        mode = st.radio("类型 *", ["🔗 URL链接", "📁 文件上传"], horizontal=True, key="add_mode_radio")
         is_file_mode = "文件" in mode
 
-        name = st.text_input("工具名称 *", max_chars=20, placeholder="例如：在线图片压缩")
-        desc = st.text_input("工具描述 *", max_chars=50, placeholder="一句话说明工具用途")
+        name = st.text_input("工具名称 *", max_chars=20, placeholder="请输入工具名称（必填，2-20个字符）")
+        desc = st.text_input("工具描述 *", max_chars=50, placeholder="请输入工具描述（必填，5-50个字符，一句话说明用途）")
 
-        uploaded_file = None
-        url = ""
         if is_file_mode:
             uploaded_file = st.file_uploader("上传文件 *", key="file_upload")
+            url = ""
+            usage = "download"
+            source = "self"
         else:
-            url = st.text_input("工具链接 *", placeholder="https://example.com")
+            url = st.text_input("工具链接 *", placeholder="请输入工具链接（必填，以http://或https://开头）")
+            uploaded_file = None
+            usage_row1, usage_row2 = st.columns(2)
+            with usage_row1:
+                usage_sel = st.selectbox("使用类型 *", ["在线使用", "下载安装"], key="usage_sel")
+                usage = "online" if "在线" in usage_sel else "download"
+            with usage_row2:
+                source_sel = st.selectbox("工具来源 *", ["第三方工具", "自研工具"], key="source_sel")
+                source = "third_party" if "第三方" in source_sel else "self"
 
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if not is_file_mode:
-                usage = st.selectbox("使用类型", ["在线使用", "下载安装"], key="usage_sel")
-                source = st.selectbox("工具来源", ["第三方工具", "自研工具"], key="source_sel")
+        cat_row1, cat_row2 = st.columns(2)
+        with cat_row1:
             cat_options = [f"{c['icon']} {c['name']}" for c in CATEGORIES if c['id'] != 'recommend']
-            cat = st.selectbox("分类", cat_options, key="cat_sel")
+            cat = st.selectbox("分类 *", cat_options, key="cat_sel")
+        with cat_row2:
+            icon = st.selectbox("图标 *", ["🔧", "💻", "🎨", "📊", "📝", "🖼️", "🔍", "⚡", "🚀", "🎮", "📱", "🌐"], key="icon_sel")
 
-        with col_b:
-            icon = st.selectbox("图标", ["🔧", "💻", "🎨", "📊", "📝", "🖼️", "🔍", "⚡", "🚀", "🎮", "📱", "🌐"], key="icon_sel")
-
-        tags_str = st.text_input("标签", placeholder="逗号分隔，最多3个", key="tags_input")
+        tags_str = st.text_input("标签 *", placeholder="请输入标签（必填，逗号分隔，最多3个，每个最多4字）", key="tags_input")
 
         col_submit, col_cancel = st.columns(2)
         with col_submit:
             if st.button("提交", use_container_width=True, type="primary"):
-                cat_id = [c['id'] for c in CATEGORIES if c['id'] != 'recommend'][
-                    cat_options.index(cat)
-                ]
-                tags = [t.strip()[:4] for t in tags_str.replace("，", ",").split(",") if t.strip()][:3]
-
-                if is_file_mode:
-                    tool, err = add_file_tool(
-                        name=name, description=desc, uploaded_file=uploaded_file,
-                        icon=icon, category=cat_id, tags=tags,
-                    )
+                errors = []
+                if not name or not name.strip():
+                    errors.append("⚠️ 请输入工具名称")
+                elif len(name.strip()) < 2:
+                    errors.append("⚠️ 工具名称至少2个字符")
+                if not desc or not desc.strip():
+                    errors.append("⚠️ 请输入工具描述")
+                elif len(desc.strip()) < 5:
+                    errors.append("⚠️ 工具描述至少5个字符")
+                if not is_file_mode:
+                    if not url or not url.strip():
+                        errors.append("⚠️ 请输入工具链接")
                 else:
-                    usage_type = "online" if "在线" in usage else "download"
-                    source_type = "third_party" if "第三方" in source else "self"
-                    tool, err = add_url_tool(
-                        name=name, description=desc, url=url,
-                        icon=icon, usage_type=usage_type, source=source_type,
-                        category=cat_id, tags=tags,
-                    )
+                    if not uploaded_file:
+                        errors.append("⚠️ 请选择要上传的文件")
+                if not tags_str or not tags_str.strip():
+                    errors.append("⚠️ 请输入至少一个标签")
 
-                if err:
-                    st.error(err)
+                if errors:
+                    for e in errors:
+                        st.warning(e)
                 else:
-                    st.session_state.show_add_modal = False
-                    st.session_state.toast_msg = "添加成功"
-                    st.session_state.toast_show = True
-                    st.rerun()
+                    cat_id = [c['id'] for c in CATEGORIES if c['id'] != 'recommend'][
+                        cat_options.index(cat)
+                    ]
+                    tags = [t.strip()[:4] for t in tags_str.replace("，", ",").split(",") if t.strip()][:3]
+
+                    if is_file_mode:
+                        tool, err = add_file_tool(
+                            name=name, description=desc, uploaded_file=uploaded_file,
+                            icon=icon, category=cat_id, tags=tags,
+                        )
+                    else:
+                        tool, err = add_url_tool(
+                            name=name, description=desc, url=url,
+                            icon=icon, usage_type=usage, source=source,
+                            category=cat_id, tags=tags,
+                        )
+
+                    if err:
+                        st.error(err)
+                    else:
+                        st.session_state.show_add_modal = False
+                        st.session_state.toast_msg = "添加成功"
+                        st.session_state.toast_show = True
+                        st.rerun()
 
         with col_cancel:
             if st.button("取消", use_container_width=True):
@@ -710,6 +930,9 @@ def render_add_modal():
                 st.rerun()
 
     add_dialog()
+
+    if not st.session_state.get("_dialog_was_open", False):
+        st.session_state.show_add_modal = False
 
 
 def render_toast():
@@ -733,24 +956,36 @@ def render_footer():
 def main():
     init_state()
 
+    st.session_state["_dialog_was_open"] = False
+
     render_nav()
 
     tools = load_tools()
+
+    active = st.session_state.active_category
+    if active == "source_self":
+        filter_source = "self"
+        filter_category = "recommend"
+    elif active == "source_third":
+        filter_source = "third_party"
+        filter_category = "recommend"
+    else:
+        filter_source = "all"
+        filter_category = active
+
     filtered = filter_tools(
         tools,
-        category=st.session_state.active_category,
-        source=st.session_state.source_filter,
+        category=filter_category,
+        source=filter_source,
         query=st.session_state.search_query,
     )
 
-    custom_count = sum(1 for t in tools if t.get('toolType') == 'file' or t['id'] > 999999)
-
     render_category_bar()
-    render_welcome(len(tools), len(filtered), custom_count)
+    render_welcome(len(tools), len(filtered))
 
     if st.session_state.search_query.strip():
         st.markdown(
-            f'<p style="text-align:center;font-size:13px;opacity:0.4;margin-bottom:16px">'
+            f'<p style="text-align:center;font-size:13px;opacity:0.3;margin-bottom:12px">'
             f'搜索 "<strong>{st.session_state.search_query}</strong>" 找到 '
             f'<strong>{len(filtered)}</strong> 个工具</p>',
             unsafe_allow_html=True,

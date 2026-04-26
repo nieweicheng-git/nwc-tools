@@ -177,14 +177,14 @@ def filter_tools(tools, category="recommend", source="all", query=""):
     result = tools
     if source != "all":
         result = [t for t in result if t['source'] == source]
+    if category != "recommend":
+        result = [t for t in result if t['category'] == category]
     if query.strip():
         q = query.lower().strip()
         result = [t for t in result if
                   q in t['name'].lower() or
                   q in t['description'].lower() or
                   any(q in tag.lower() for tag in t.get('tags', []))]
-    elif category != "recommend":
-        result = [t for t in result if t['category'] == category]
     return result
 
 
