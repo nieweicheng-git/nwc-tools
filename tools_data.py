@@ -98,7 +98,7 @@ def add_url_tool(name, description, url, icon="🔧", usage_type="online", sourc
     return tool, None
 
 
-def add_file_tool(name, description, uploaded_file, icon="🔧", category="dev", tags=None):
+def add_file_tool(name, description, uploaded_file, icon="🔧", category="dev", tags=None, source="self"):
     if not name or not description:
         return None, "必填字段不能为空"
     if len(name) > 20:
@@ -110,15 +110,13 @@ def add_file_tool(name, description, uploaded_file, icon="🔧", category="dev",
 
     original_name = uploaded_file.name
     ext = os.path.splitext(original_name)[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return None, f"不支持的文件类型: {ext}"
 
     file_bytes = uploaded_file.read()
     if len(file_bytes) > MAX_FILE_SIZE_MB * 1024 * 1024:
         return None, f"文件过大，最大{MAX_FILE_SIZE_MB}MB"
 
     file_id = str(uuid.uuid4())
-    saved_name = f"{file_id}{ext}"
+    saved_name = f"{file_id}{ext}" if ext else f"{file_id}"
     file_path = UPLOAD_DIR / saved_name
 
     with open(file_path, 'wb') as f:
@@ -134,7 +132,7 @@ def add_file_tool(name, description, uploaded_file, icon="🔧", category="dev",
         "description": description.strip(),
         "icon": icon,
         "usageType": "download",
-        "source": "self",
+        "source": source,
         "toolType": "file",
         "fileId": file_id,
         "fileName": safe_name,

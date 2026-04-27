@@ -316,7 +316,7 @@ header[data-testid="stHeader"] { display: none !important; }
     opacity: 0.45;
     line-height: 1.5;
     margin-bottom: 8px;
-    text-align: center;
+    text-align: left;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -329,7 +329,7 @@ header[data-testid="stHeader"] { display: none !important; }
     align-items: center;
     gap: 4px;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-start;
     margin-bottom: 4px;
     min-height: 22px;
 }
@@ -850,13 +850,18 @@ def render_add_modal():
         desc = st.text_input("工具描述 *", max_chars=50, placeholder="请输入工具描述（必填，5-50个字符，一句话说明用途）")
 
         if is_file_mode:
-            uploaded_file = st.file_uploader("上传文件 *", key="file_upload")
+            uploaded_files = st.file_uploader("上传文件 *", key="file_upload", accept_multiple_files=True)
             url = ""
             usage = "download"
-            source = "self"
+            source_row1, source_row2 = st.columns(2)
+            with source_row1:
+                source_sel = st.selectbox("工具来源 *", ["请选择工具来源", "自研", "第三方"], key="source_sel_file")
+                source = "self" if source_sel == "自研" else ("third_party" if source_sel == "第三方" else "")
+            with source_row2:
+                st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
         else:
             url = st.text_input("工具链接 *", placeholder="请输入工具链接（必填，以http://或https://开头）")
-            uploaded_file = None
+            uploaded_files = None
             usage_row1, usage_row2 = st.columns(2)
             with usage_row1:
                 usage_sel = st.selectbox("使用类型 *", ["在线使用", "下载安装"], key="usage_sel")
@@ -890,8 +895,10 @@ def render_add_modal():
                     if not url or not url.strip():
                         errors.append("⚠️ 请输入工具链接")
                 else:
-                    if not uploaded_file:
+                    if not uploaded_files:
                         errors.append("⚠️ 请选择要上传的文件")
+                    if not source:
+                        errors.append("⚠️ 请选择工具来源")
                 if not tags_str or not tags_str.strip():
                     errors.append("⚠️ 请输入至少一个标签")
 
@@ -905,10 +912,14 @@ def render_add_modal():
                     tags = [t.strip()[:4] for t in tags_str.replace("，", ",").split(",") if t.strip()][:3]
 
                     if is_file_mode:
-                        tool, err = add_file_tool(
-                            name=name, description=desc, uploaded_file=uploaded_file,
-                            icon=icon, category=cat_id, tags=tags,
-                        )
+                        for uploaded_file in uploaded_files:
+                            tool, err = add_file_tool(
+                                name=name, description=desc, uploaded_file=uploaded_file,
+                                icon=icon, category=cat_id, tags=tags, source=source,
+                            )
+                            if err:
+                                st.error(err)
+                                break
                     else:
                         tool, err = add_url_tool(
                             name=name, description=desc, url=url,
